@@ -126,7 +126,7 @@ static struct tegra_das_platform_data tegra_das_pdata = {
 				.bits_per_sample = 16,
 				.rate = 44100,
 				.dac_dap_data_comm_format =
-						dac_dap_data_format_all,
+						dac_dap_data_format_i2s,
 			},
 		},
 		[2] = {
@@ -157,11 +157,11 @@ static struct tegra_das_platform_data tegra_das_pdata = {
 			.dap_port = tegra_das_port_dap4,
 			.codec_type = tegra_audio_codec_type_bluetooth,
 			.device_property = {
-				.num_channels = 1,
+				.num_channels = 2,
 				.bits_per_sample = 16,
 				.rate = 8000,
 				.dac_dap_data_comm_format =
-					dac_dap_data_format_dsp,
+					dac_dap_data_format_i2s,
 			},
 		},
 	},
