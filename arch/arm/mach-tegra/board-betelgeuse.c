@@ -27,7 +27,6 @@
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/gpio.h>
-#include <linux/gpio_keys.h>
 #include <linux/input/eeti_ts.h>
 #include <linux/input.h>
 #include <linux/io.h>
@@ -59,28 +58,107 @@
 #include "wakeups-t2.h"
 
 /* NVidia bootloader tags */
-#define ATAG_NVIDIA		0x41000801
-
-#define ATAG_NVIDIA_RM			0x1
-#define ATAG_NVIDIA_DISPLAY		0x2
-#define ATAG_NVIDIA_FRAMEBUFFER		0x3
-#define ATAG_NVIDIA_CHIPSHMOO		0x4
-#define ATAG_NVIDIA_CHIPSHMOOPHYS	0x5
-#define ATAG_NVIDIA_PRESERVED_MEM_0	0x10000
-#define ATAG_NVIDIA_PRESERVED_MEM_N	2
-#define ATAG_NVIDIA_FORCE_32		0x7fffffff
+#define ATAG_NVIDIA			0x41000801
+#define MAX_MEMHDL			8
 
 struct tag_tegra {
-	__u32 bootarg_key;
-	__u32 bootarg_len;
-	char bootarg[1];
+        __u32 bootarg_len;
+        __u32 bootarg_key;
+        __u32 bootarg_nvkey;
+        __u32 bootarg[];
+};
+
+struct memhdl {
+        __u32 id;
+        __u32 start;
+        __u32 size;
+};
+
+enum {  
+        RM = 1,
+        DISPLAY,
+        FRAMEBUFFER,
+        CHIPSHMOO,
+        CHIPSHMOO_PHYS,
+        CARVEOUT,
+        WARMBOOT,
+};
+
+static int num_memhdl = 0;
+
+static struct memhdl nv_memhdl[MAX_MEMHDL];
+static size_t fb_addr;
+
+static const char atag_ids[][16] = {
+        "RM             ",
+        "DISPLAY        ",
+        "FRAMEBUFFER    ",
+        "CHIPSHMOO      ",
+        "CHIPSHMOO_PHYS ",
+        "CARVEOUT       ",
+        "WARMBOOT       ",
 };
 
 static int __init parse_tag_nvidia(const struct tag *tag)
 {
-	return 0;
+        int i;
+        struct tag_tegra *nvtag = (struct tag_tegra *)tag;
+        __u32 id;
+
+        switch (nvtag->bootarg_nvkey) {
+        case FRAMEBUFFER:
+                id = nvtag->bootarg[1];
+                for (i=0; i<num_memhdl; i++)
+                        if (nv_memhdl[i].id == id)
+                                fb_addr = nv_memhdl[i].start;
+                break;
+        case WARMBOOT:
+                id = nvtag->bootarg[1];
+                for (i=0; i<num_memhdl; i++) {
+                        if (nv_memhdl[i].id == id) {
+                                tegra_lp0_vec_start = nv_memhdl[i].start;
+                                tegra_lp0_vec_size = nv_memhdl[i].size;
+                        }
+                }
+                break;
+        }
+
+        if (nvtag->bootarg_nvkey & 0x10000) {
+                char pmh[] = " PreMemHdl     ";
+                id = nvtag->bootarg_nvkey;
+                if (num_memhdl < MAX_MEMHDL) {
+                        nv_memhdl[num_memhdl].id = id;
+                        nv_memhdl[num_memhdl].start = nvtag->bootarg[1];
+                        nv_memhdl[num_memhdl].size = nvtag->bootarg[2];
+                        num_memhdl++;
+                }
+                pmh[11] = '0' + id;
+                print_hex_dump(KERN_INFO, pmh, DUMP_PREFIX_NONE,
+                                32, 4, &nvtag->bootarg[0], 4*(tag->hdr.size-2), false);
+        }
+        else if (nvtag->bootarg_nvkey <= ARRAY_SIZE(atag_ids))
+                print_hex_dump(KERN_INFO, atag_ids[nvtag->bootarg_nvkey-1], DUMP_PREFIX_NONE,
+                                32, 4, &nvtag->bootarg[0], 4*(tag->hdr.size-2), false);
+        else
+                pr_warning("unknown ATAG key %d\n", nvtag->bootarg_nvkey);
+
+        return 0;
 }
 __tagtable(ATAG_NVIDIA, parse_tag_nvidia);
+
+static struct tegra_suspend_platform_data betelgeuse_suspend = {
+	.cpu_timer	= 5000,
+	.cpu_off_timer	= 5000,
+	.core_timer	= 0x7e7e,
+	.core_off_timer	= 0x7f,
+	.corereq_high	= false,
+	.sysclkreq_high	= true,
+	.suspend_mode   = TEGRA_SUSPEND_LP0,
+	.wake_enb	= TEGRA_WAKE_GPIO_PA0,
+	.wake_high	= 0,
+	.wake_low	= TEGRA_WAKE_GPIO_PA0,
+	.wake_any	= 0,
+};
 
 static struct plat_serial8250_port debug_uart_platform_data[] = {
 	{
@@ -127,142 +205,9 @@ static void __init tegra_betelgeuse_fixup(struct machine_desc *desc,
 	mi->bank[0].size  = SHUTTLE_MEM_SIZE - SHUTTLE_GPU_MEM_SIZE;
 }
 
-/*
-static struct tegra_suspend_platform_data betelgeuse_suspend = {
-	.cpu_timer = 5000,
-	.cpu_off_timer = 5000,
-	.core_timer = 0x7e7e,
-	.core_off_timer = 0x7f,
-	.separate_req = true,
-	.corereq_high = false,
-	.sysclkreq_high = true,
-	.suspend_mode = TEGRA_SUSPEND_LP0,
-};
-*/
-
-static struct tegra_suspend_platform_data betelgeuse_suspend = {
-        /*
-         * Check power on time and crystal oscillator start time
-         * for appropriate settings.
-         */
-        .cpu_timer      = 2000,
-        .cpu_off_timer  = 100,
-        .suspend_mode   = TEGRA_SUSPEND_LP0,
-        .core_timer     = 0x7e7e,
-        .core_off_timer = 0xf,
-        .separate_req   = true,
-        .corereq_high   = false,
-        .sysclkreq_high = true,
-        .wake_enb       = TEGRA_WAKE_GPIO_PV2,
-        .wake_high      = 0,
-        .wake_low       = TEGRA_WAKE_GPIO_PV2,
-        .wake_any       = 0,
-};
-
-/*
-static struct tegra_suspend_platform_data shuttle_suspend = {
-        .cpu_timer = 2000, // 5000
-        .cpu_off_timer = 0, // 5000
-        .core_timer = 0x7e7e, //
-        .core_off_timer = 0, // 0x7f
-        .corereq_high = false,
-        .sysclkreq_high = true,
-        .suspend_mode = TEGRA_SUSPEND_LP0,
-        #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,38) //NB: 2.6.39+ handles this automatically
-        .separate_req = true,
-        .wake_enb = SHUTTLE_WAKE_KEY_POWER | SHUTTLE_WAKE_KEY_RESUME | TEGRA_WAKE_RTC_ALARM,
-        .wake_low = SHUTTLE_WAKE_KEY_POWER | SHUTTLE_WAKE_KEY_RESUME,
-        .wake_any = 0,
-        #endif
-};*/
-
-#ifdef CONFIG_KEYBOARD_GPIO
-#define GPIO_KEY(_id, _gpio, _iswake) \
-{ \
-.code = _id, \
-.gpio = TEGRA_GPIO_##_gpio, \
-.active_low = 1, \
-.desc = #_id, \
-.type = EV_KEY, \
-.wakeup = _iswake, \
-.debounce_interval = 10, \
-}
-
-static struct gpio_keys_button antares_keys[] = {
-	[0] = GPIO_KEY(KEY_VOLUMEUP, PQ5, 0),
-	[1] = GPIO_KEY(KEY_VOLUMEDOWN, PQ4, 0),
-	[2] = GPIO_KEY(KEY_POWER, PV2, 1),
-};
-
-#define PMC_WAKE_STATUS 0x14
-
-static int antares_wakeup_key(void)
-{
-	unsigned long status = readl(IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
-	writel(0xffffffff, IO_ADDRESS(TEGRA_PMC_BASE) + PMC_WAKE_STATUS);
-	if (status & TEGRA_WAKE_GPIO_PV2) /* power button */
-        	return KEY_POWER;
-	else if (status & TEGRA_WAKE_GPIO_PV3) /* AC adapter plug in/out */
-        	return KEY_POWER;
-	else
-		return KEY_RESERVED;
-}
-
-static struct gpio_keys_platform_data antares_keys_platform_data = {
-	.buttons = antares_keys,
-	.nbuttons = ARRAY_SIZE(antares_keys),
-	.wakeup_key = antares_wakeup_key,
-};
-
-static struct platform_device antares_keys_device = {
-	.name = "gpio-keys",
-	.id = 0,
-	.dev = {
-		.platform_data = &antares_keys_platform_data,
-	},
-};
-
-static void antares_keys_init(void)
-{
-	int i;
-	for (i = 0; i < ARRAY_SIZE(antares_keys); i++)
-	tegra_gpio_enable(antares_keys[i].gpio);
-}
-#endif
-
-/*
-static struct gpio_keys_button betelgeuse_gpio_keys_buttons[] = {
-	{
-		.code		= KEY_POWER,
-		.gpio		= TEGRA_GPIO_PA0,
-		.active_low	= 1,
-		.desc		= "Power",
-		.type		= EV_KEY,
-		.wakeup		= 1,
-	},
-};
-
-static struct gpio_keys_platform_data betelgeuse_gpio_keys = {
-	.buttons	= betelgeuse_gpio_keys_buttons,
-	.nbuttons	= ARRAY_SIZE(betelgeuse_gpio_keys_buttons),
-};
-
-static struct platform_device betelgeuse_gpio_keys_device = {
-	.name	= "gpio-keys",
-	.id	= -1,
-	.dev	= {
-		.platform_data = &betelgeuse_gpio_keys,
-	},
-};
-*/
-
 static struct platform_device *betelgeuse_devices[] __initdata = {
         &debug_uart,
         &tegra_udc_device,
-        //&betelgeuse_gpio_keys_device,
-	#ifdef CONFIG_KEYBOARD_GPIO
-	&antares_keys_device,
-	#endif
         &tegra_spi_device1,
         &tegra_spi_device2,
         &tegra_spi_device3,
@@ -276,10 +221,8 @@ static struct platform_device *betelgeuse_devices[] __initdata = {
 static void __init tegra_betelgeuse_init(void)
 {
 	tegra_common_init();
+	tegra_init_suspend(&betelgeuse_suspend);
 //	betelgeuse_emc_init();
-
-//	tegra_init_suspend(&betelgeuse_suspend);
-
 	betelgeuse_pinmux_init();
 	betelgeuse_clocks_init();
 	betelgeuse_i2c_init();
@@ -293,16 +236,11 @@ static void __init tegra_betelgeuse_init(void)
 	betelgeuse_audio_init();
 	//betelgeuse_wired_jack_init();
 	betelgeuse_sensors_init();
-	//betelgeuse_keyboard_register_devices();
 
 	platform_add_devices(betelgeuse_devices, ARRAY_SIZE(betelgeuse_devices));
 
-	//betelgeuse_kbc_init();
-	#ifdef CONFIG_KEYBOARD_GPIO
-	antares_keys_init();
-	#endif
+	betelgeuse_kbc_init();
 	betelgeuse_touch_init_egalax();
-	//antares_ec_init();
 	betelgeuse_wifi_init();
 	betelgeuse_camera_init();
 }

@@ -61,15 +61,6 @@ int betelgeuse_wifi_status_register(void (*callback)(int , void *), void *);
 #define SHUTTLE_MEM_SIZE	SZ_512M			/* Total memory */
 #define SHUTTLE_GPU_MEM_SIZE	SZ_128M			/* Memory reserved for GPU */
 
-#define SHUTTLE_KEY_VOLUMEUP    TEGRA_GPIO_PB1  /* 0=pressed */
-#define SHUTTLE_KEY_VOLUMEDOWN  TEGRA_GPIO_PK7  /* 0=pressed */
-#define SHUTTLE_KEY_POWER       TEGRA_GPIO_PV2  /* 0=pressed */
-#define SHUTTLE_KEY_RESUME      TEGRA_GPIO_PV6  /* 0=pressed */
-#define SHUTTLE_KEY_SUSPEND     TEGRA_GPIO_PAA4 /* 0=pressed */
-#define SHUTTLE_KEY_BACK        TEGRA_GPIO_PH0  /* 0=pressed */
-#define SHUTTLE_FB_NONROTATE TEGRA_GPIO_PH1 /*1 = screen rotation locked */
-#define SW_ROTATION_LOCK        (SW_MAX-1)
-
 #define BETELGEUSE_CAMERA_POWER	TEGRA_GPIO_PV4
 
 #define BETELGEUSE_WLAN_PWR	TEGRA_GPIO_PK5
@@ -78,5 +69,32 @@ int betelgeuse_wifi_status_register(void (*callback)(int , void *), void *);
 #define ADT7461_IRQ_GPIO	TEGRA_GPIO_PN6
 #define AC_PRESENT_GPIO		TEGRA_GPIO_PV3
 #define BETELGEUSE_NVEC_REQ	TEGRA_GPIO_PBB1	
+#define BETELGEUSE_WAKE_FROM_KEY TEGRA_GPIO_PA0 // EC Keyboard Wakeup
+#define BETELGEUSE_LOW_BATT	TEGRA_GPIO_PW3
+
+/* Video stuff */
+#define BETALGEUSE_BL_ENB		TEGRA_GPIO_PB5
+#define BETALGEUSE_LVDS_SHUTDOWN	TEGRA_GPIO_PB2
+#define BETALGEUSE_EN_VDD_PANEL		TEGRA_GPIO_PC6
+#define BETALGEUSE_BL_VDD		TEGRA_GPIO_PW0
+#define BETALGEUSE_BL_PWM		TEGRA_GPIO_PB4 /* PWM - Not used now */
+#define BETALGEUSE_HDMI_HPD		TEGRA_GPIO_PN7 /* 1=HDMI plug detected */
+
+/* Active input GPIOs in 2.6.32 - not active in 2.6.36:
+* gpio-0   (nvrm_gpio           ) in  hi irq-192 (default) wakeup TEGRA_GPIO_PA0 EC Keyboard Wakeup
+* gpio-12  (nvrm_gpio           ) in  lo			TEGRA_GPIO_PB4 LCD_BL_PWM?
+* gpio-154 (nvrm_gpio           ) in  lo			TEGRA_GPIO_PT2 s_Vddio_Vid_En
+* gpio-161 (nvrm_gpio           ) in  lo irq-353 (default)	TEGRA_GPIO_PU1 CAP_INT
+* gpio-162 (nvrm_gpio           ) in  hi irq-354 (default)	TEGRA_GPIO_PU2
+* gpio-170 (nvrm_gpio           ) in  hi irq-362 (default)	TEGRA_GPIO_PV2 DOCK_IN_DET
+* gpio-175 (nvrm_gpio           ) in  lo irq-367 (default)	TEGRA_GPIO_PV7 GSensor
+* gpio-178 (nvrm_gpio           ) in  lo irq-370 (default)	TEGRA_GPIO_PW2 USB hub suspend
+* gpio-184 (nvrm_gpio           ) in  hi			TEGRA_GPIO_PX0 s_PCB_ID_GPIO
+* gpio-186 (nvrm_gpio           ) in  lo			TEGRA_GPIO_PX2 s_PCB_ID_GPIO
+* gpio-187 (nvrm_gpio           ) in  hi irq-379 (default)	TEGRA_GPIO_PX3
+*
+* Active output GPIOs:
+* gpio-220 (nvrm_gpio           ) out hi			TEGRA_GPIO_PBB4 s_VSleep_En
+*/
 
 #endif
